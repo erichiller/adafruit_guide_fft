@@ -35,21 +35,21 @@ class SerialPortDevice(SpectrogramDevice.SpectrogramDevice):
 		return self.sampleRate
 
 	def set_samplerate(self, samplerate):
-		self.port.write('SET SAMPLE_RATE_HZ %d;' % samplerate)
+		self.write('SET SAMPLE_RATE_HZ %d;' % samplerate)
 		self.sampleRate = samplerate
 
 	def get_magnitudes(self):
 		"""Return an array of FFT magnitudes.  The number of values returned is the same as the FFT size."""
-		self.port.write('GET MAGNITUDES;')
+		self.write('GET MAGNITUDES;')
 		return [float(self._readline()) for i in range(self.fftSize)]
 
 	def open(self):
 		"""Start communication with the device.  Must be done before any other calls are made to the device."""
 		self.port = serial.Serial(self.path, PORT_BAUD_RATE, timeout=TIMEOUT_SECONDS, writeTimeout=TIMEOUT_SECONDS)
 		# Read the initial state of the device
-		self.port.write('GET FFT_SIZE;')
+		self.write('GET FFT_SIZE;')
 		self.fftSize = int(self._readline())
-		self.port.write('GET SAMPLE_RATE_HZ;')
+		self.write('GET SAMPLE_RATE_HZ;')
 		self.sampleRate = int(self._readline())
 
 	def close(self):
@@ -61,6 +61,16 @@ class SerialPortDevice(SpectrogramDevice.SpectrogramDevice):
 		if value == None or value == '':
 			raise IOError('Timeout exceeded while waiting for device to respond.')
 		return value
+
+	def write(self, data: bytearray):
+		""" write data to self.port """
+		if type(data) is not bytearray:
+			if type(data) is str:
+				data = data.encode()
+			else:
+				TypeError("data must be of type bytearray or string")
+		self.port.write(data)
+
 
 
 def enumerate_devices():

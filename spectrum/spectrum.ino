@@ -5,7 +5,11 @@
 
 #define ARM_MATH_CM4
 #include <arm_math.h>
-#include <Adafruit_NeoPixel.h>
+// #include <Adafruit_NeoPixel.h>
+
+//#define DEBUG
+//#define DEBUG_STARTUP
+#define HUE_DIRECT_FROM_FREQUENCY
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -20,12 +24,11 @@ int LEDS_ENABLED = 1;                  // Control if the LED's should display th
                                        // Useful for turning the LED display on and off with commands from the serial port.
 const int FFT_SIZE = 256;              // Size of the FFT.  Realistically can only be at most 256 
                                        // without running out of memory for buffers and other state.
-const int AUDIO_INPUT_PIN = 14;        // Input ADC pin for audio data.
+const int AUDIO_INPUT_PIN = 9;         // Input ADC pin for audio data.
 const int ANALOG_READ_RESOLUTION = 10; // Bits of resolution for the ADC.
 const int ANALOG_READ_AVERAGING = 16;  // Number of samples to average with each ADC reading.
 const int POWER_LED_PIN = 13;          // Output pin for power LED (pin 13 to use Teensy 3.0's onboard LED).
-const int NEO_PIXEL_PIN = 3;           // Output pin for neo pixels.
-const int NEO_PIXEL_COUNT = 4;         // Number of neo pixels.  You should be able to increase this without
+const int FREQUENCY_BINS = 1;           // Number of neo pixels.  You should be able to increase this without
                                        // any other changes to the program.
 const int MAX_CHARS = 65;              // Max size of the input command buffer
 
@@ -39,10 +42,9 @@ IntervalTimer samplingTimer;
 float samples[FFT_SIZE*2];
 float magnitudes[FFT_SIZE];
 int sampleCounter = 0;
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NEO_PIXEL_COUNT, NEO_PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 char commandBuffer[MAX_CHARS];
-float frequencyWindow[NEO_PIXEL_COUNT+1];
-float hues[NEO_PIXEL_COUNT];
+float frequencyWindow[FREQUENCY_BINS+1];
+float hues[FREQUENCY_BINS];
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -61,10 +63,6 @@ void setup() {
   // Turn on the power indicator LED.
   pinMode(POWER_LED_PIN, OUTPUT);
   digitalWrite(POWER_LED_PIN, HIGH);
-  
-  // Initialize neo pixel library and turn off the LEDs
-  pixels.begin();
-  pixels.show(); 
   
   // Clear the input command buffer
   memset(commandBuffer, 0, sizeof(commandBuffer));
@@ -85,7 +83,8 @@ void loop() {
     arm_cfft_radix4_f32(&fft_inst, samples);
     // Calculate magnitude of complex numbers output by the FFT.
     arm_cmplx_mag_f32(samples, magnitudes, FFT_SIZE);
-  
+
+
     if (LEDS_ENABLED == 1)
     {
       spectrumLoop();
@@ -105,9 +104,10 @@ void loop() {
 ////////////////////////////////////////////////////////////////////////////////
 
 // Compute the average magnitude of a target frequency window vs. all other frequencies.
-void windowMean(float* magnitudes, int lowBin, int highBin, float* windowMean, float* otherMean) {
+void windowMean(float* magnitudes, int lowBin, int highBin, float* windowMean, float* otherMean, int *windowMax) {
     *windowMean = 0;
     *otherMean = 0;
+    *windowMax = 1;
     // Notice the first magnitude bin is skipped because it represents the
     // average power of the signal.
     for (int i = 1; i < FFT_SIZE/2; ++i) {
@@ -117,10 +117,14 @@ void windowMean(float* magnitudes, int lowBin, int highBin, float* windowMean, f
       else {
         *otherMean += magnitudes[i];
       }
+      if(magnitudes[i] > magnitudes[*windowMax]){
+        *windowMax=i;
+      }
     }
     *windowMean /= (highBin - lowBin) + 1;
     *otherMean /= (FFT_SIZE / 2 - (highBin - lowBin));
 }
+
 
 // Convert a frequency to the appropriate FFT bin it will fall within.
 int frequencyToBin(float frequency) {
@@ -167,7 +171,18 @@ uint32_t pixelHSVtoRGBColor(float hue, float saturation, float value) {
   r += m;
   g += m;
   b += m;
-  return pixels.Color(int(255*r), int(255*g), int(255*b));
+#ifdef DEBUG
+  Serial.print("FREQUENCY_BINS="); Serial.println(FREQUENCY_BINS);
+  Serial.print("Hue=");  Serial.print(hue,DEC);  Serial.print("Saturation=");  Serial.print(saturation,DEC); Serial.print("Luminosity=");  Serial.println(value,DEC);
+  Serial.print("red=");  Serial.print(r,DEC);    Serial.print("x255=");  Serial.print((r*255),DEC);  Serial.print("hex=");  Serial.println(int(255*r),HEX);
+  Serial.print("grn=");  Serial.print(g,DEC);    Serial.print("x255=");  Serial.print((g*255),DEC);  Serial.print("hex=");  Serial.println(int(255*g),HEX);
+  Serial.print("blu=");  Serial.print(b,DEC);    Serial.print("x255=");  Serial.print((b*255),DEC);  Serial.print("hex=");  Serial.println(int(255*b),HEX);
+#endif
+
+//  Serial.print(int(255*r));  Serial.print(",");  Serial.print(int(255*g));  Serial.print(",");  Serial.print(int(255*b));  Serial.println(";");
+  Serial.print(";");  Serial.print(uint16_t(0xFFFF*r));  Serial.print(",");  Serial.print(uint16_t(0xFFFF*g));  Serial.print(",");  Serial.print(uint16_t(0xFFFF*b));  Serial.println(";");
+  return ( ((int(255*r))<<16) + ((int(255*g))<<8) + int(255*b) );
+
 }
 
 
@@ -178,26 +193,37 @@ uint32_t pixelHSVtoRGBColor(float hue, float saturation, float value) {
 void spectrumSetup() {
   // Set the frequency window values by evenly dividing the possible frequency
   // spectrum across the number of neo pixels.
-  float windowSize = (SAMPLE_RATE_HZ / 2.0) / float(NEO_PIXEL_COUNT);
-  for (int i = 0; i < NEO_PIXEL_COUNT+1; ++i) {
+  float windowSize = (SAMPLE_RATE_HZ / 2.0) / float(FREQUENCY_BINS);
+  for (int i = 0; i < FREQUENCY_BINS+1; ++i) {
     frequencyWindow[i] = i*windowSize;
   }
   // Evenly spread hues across all pixels.
-  for (int i = 0; i < NEO_PIXEL_COUNT; ++i) {
-    hues[i] = 360.0*(float(i)/float(NEO_PIXEL_COUNT-1));
+  for (int i = 0; i < FREQUENCY_BINS; ++i) {
+    hues[i] = 360.0 * (float(i)/float(FREQUENCY_BINS-1));
+#ifdef DEBUG_STARTUP
+    Serial.print("**** DEBUG_STARTUP **** hues[");  Serial.print(i);  Serial.print("]="); Serial.println(hues[i]);
+#endif
   }
+#ifdef DEBUG_STARTUP
+  Serial.print("**** DEBUG_STARTUP **** \\end// hues[0]="); Serial.println(hues[0]);
+#endif
+
 }
 
 void spectrumLoop() {
   // Update each LED based on the intensity of the audio 
   // in the associated frequency window.
   float intensity, otherMean;
-  for (int i = 0; i < NEO_PIXEL_COUNT; ++i) {
+  int windowMax;
+
+  for (int i = 0; i < FREQUENCY_BINS; ++i) {
+    
     windowMean(magnitudes, 
                frequencyToBin(frequencyWindow[i]),
                frequencyToBin(frequencyWindow[i+1]),
                &intensity,
-               &otherMean);
+               &otherMean,
+               &windowMax);
     // Convert intensity to decibels.
     intensity = 20.0*log10(intensity);
     // Scale the intensity and clamp between 0 and 1.0.
@@ -205,9 +231,21 @@ void spectrumLoop() {
     intensity = intensity < 0.0 ? 0.0 : intensity;
     intensity /= (SPECTRUM_MAX_DB-SPECTRUM_MIN_DB);
     intensity = intensity > 1.0 ? 1.0 : intensity;
-    pixels.setPixelColor(i, pixelHSVtoRGBColor(hues[i], 1.0, intensity));
+//    Serial.print(pixelHSVtoRGBColor(hues[i], 1.0, intensity), HEX);
+#ifdef HUE_DIRECT_FROM_FREQUENCY
+    float hue = (float(windowMax)/(FFT_SIZE/2.0))*360.0;
+#ifdef DEBUG
+    Serial.print("**** HUE_DIRECT_FROM_FREQUENCY");  Serial.print(" {windowMax=");   Serial.print(windowMax);  Serial.print("} {FFT_SIZE="); Serial.print(FFT_SIZE); Serial.print("} {hue=");  Serial.print(hue); Serial.print("} {intensity=}"); Serial.print(intensity, DEC); Serial.println("} ****");
+#endif
+#else
+#ifdef DEBUG
+    Serial.print("**** [i="); Serial.print(i, DEC);  Serial.print("] {hues="); Serial.print(hues[i], DEC); Serial.print("} {intensity="); Serial.print(intensity, DEC); Serial.println("} ****");
+#endif
+    float hue = hues[i];
+#endif
+    pixelHSVtoRGBColor(hue, 1.0, intensity);
+
   }
-  pixels.show();
 }
 
 
@@ -283,6 +321,12 @@ void parserLoop() {
   }
 
 void parseCommand(char* command) {
+
+#ifdef DEBUG
+  Serial.print("Command received:");
+  Serial.println(command);
+#endif
+  
   if (strcmp(command, "GET MAGNITUDES") == 0) {
     for (int i = 0; i < FFT_SIZE; ++i) {
       Serial.println(magnitudes[i]);
@@ -304,13 +348,5 @@ void parseCommand(char* command) {
   // Update spectrum display values if sample rate was changed.
   if (strstr(command, "SET SAMPLE_RATE_HZ ") != NULL) {
     spectrumSetup();
-  }
-  
-  // Turn off the LEDs if the state changed.
-  if (LEDS_ENABLED == 0) {
-    for (int i = 0; i < NEO_PIXEL_COUNT; ++i) {
-      pixels.setPixelColor(i, 0);
-    }
-    pixels.show();
   }
 }

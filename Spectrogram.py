@@ -12,13 +12,13 @@
 
 import sys
 
-from PySide import QtGui
+from Qt import QtGui, QtWidgets
 
 import SpectrogramUI
 import SerialPortDevice
 
 
-app = QtGui.QApplication(sys.argv)
+app = QtWidgets.QApplication(sys.argv)
 devices = SerialPortDevice.enumerate_devices()
 ui = SpectrogramUI.MainWindow(devices)
 sys.exit(app.exec_())

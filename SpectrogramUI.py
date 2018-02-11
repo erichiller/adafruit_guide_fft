@@ -4,8 +4,8 @@
 # User interface for Spectrogram program.
 
 import matplotlib
-matplotlib.use('Qt4Agg')
-matplotlib.rcParams['backend.qt4']='PySide'
+matplotlib.use('Qt5Agg')
+# matplotlib.rcParams['backend.qt4']='PySide'
 from matplotlib.animation import FuncAnimation
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.cm import get_cmap
@@ -13,11 +13,12 @@ from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from matplotlib.ticker import MultipleLocator, FuncFormatter
 import numpy as np
-from PySide import QtCore, QtGui
+# from Qt import QtWidgets, QtCore
+from PyQt5 import QtWidgets, QtCore
 
 VERSION = 'Spectrogram v1.0'
 
-# Add global version number/name
+# Add global version number//name
 
 class SpectrogramCanvas(FigureCanvas):
 	def __init__(self, window):
@@ -28,7 +29,7 @@ class SpectrogramCanvas(FigureCanvas):
 		self.fftSize = 256 # Initial FFT size just to render something in the charts
 		self.sampleRate = 0
 		self.binFreq = 0
-		self.binCount = self.fftSize/2
+		self.binCount = self.fftSize//2
 		self.graphUpdateHz = 10 # Update rate of the animation
 		self.coloredBin = None
 		self.magnitudes = np.zeros((self.samples, self.binCount))
@@ -70,7 +71,7 @@ class SpectrogramCanvas(FigureCanvas):
 		# Update variables to new values.
 		self.fftSize = fftSize
 		self.sampleRate = sampleRate
-		self.binCount = self.fftSize/2
+		self.binCount = self.fftSize//2
 		self.binFreq = self.sampleRate/float(self.fftSize)
 		# Remove old bar plot.
 		for bar in self.histPlot:
@@ -78,7 +79,7 @@ class SpectrogramCanvas(FigureCanvas):
 		# Update data for charts.
 		self.histPlot = self.histAx.bar(np.arange(self.binCount), np.zeros(self.binCount), width=1.0, linewidth=0.0, facecolor='blue')
 		self.magnitudes = np.zeros((self.samples, self.binCount))
-		# Update frequency x axis to have 5 evenly spaced ticks from 0 to sampleRate/2.
+		# Update frequency x axis to have 5 evenly spaced ticks from 0 to sampleRate//2.
 		ticks = np.floor(np.linspace(0, self.binCount, 5))
 		labels = ['%d hz' % i for i in np.linspace(0, self.sampleRate/2.0, 5)]
 		self.histAx.set_xticks(ticks)
@@ -116,7 +117,7 @@ class SpectrogramCanvas(FigureCanvas):
 			# the average power of the signal, and only grab the first half of values
 			# because the second half is for negative frequencies (which don't apply
 			# to an FFT run on real data).
-			mags = 20.0*np.log10(mags[1:len(mags)/2+1])
+			mags = 20.0*np.log10(mags[1:len(mags)//2+1])
 			# Update histogram bar heights based on magnitudes.
 			for bin, mag in zip(self.histPlot, mags):
 				bin.set_height(mag)
@@ -131,7 +132,7 @@ class SpectrogramCanvas(FigureCanvas):
 			return ()
 
 
-class MainWindow(QtGui.QMainWindow):
+class MainWindow(QtWidgets.QMainWindow):
 	def __init__(self, devices):
 		"""Set up the main window.  
 		   Devices should be a list of items that implement the SpectrogramDevice interface.
@@ -139,7 +140,7 @@ class MainWindow(QtGui.QMainWindow):
 		super(MainWindow, self).__init__()
 		self.devices = devices
 		self.openDevice = None
-		main = QtGui.QWidget()
+		main = QtWidgets.QWidget()
 		main.setLayout(self._setupMainLayout())
 		self.setCentralWidget(main)
 		self.status = self.statusBar()
@@ -175,22 +176,22 @@ class MainWindow(QtGui.QMainWindow):
 
 	def _communicationError(self, error):
 		# Error communicating with device, shut it down if possible.
-		mb = QtGui.QMessageBox()
+		mb = QtWidgets.QMessageBox()
 		mb.setText('Error communicating with device! %s' % error)
 		mb.exec_()
 		self._closeDevice()
 
 	def _setupMainLayout(self):
-		controls = QtGui.QVBoxLayout()
-		controls.addWidget(QtGui.QLabel('<h3>%s</h3>' % VERSION))
-		author = QtGui.QLabel('by <a href="http://www.github.com/tdicola/">Tony DiCola</a>')
+		controls = QtWidgets.QVBoxLayout()
+		controls.addWidget(QtWidgets.QLabel('<h3>%s<//h3>' % VERSION))
+		author = QtWidgets.QLabel('by <a href="http://www.github.com//tdicola//">Tony DiCola<//a>')
 		author.setOpenExternalLinks(True)
 		controls.addWidget(author)
 		controls.addSpacing(10)
 		for control in self._setupControls():
 			controls.addWidget(control)
 		controls.addStretch(1)
-		layout = QtGui.QHBoxLayout()
+		layout = QtWidgets.QHBoxLayout()
 		layout.addLayout(controls)
 		self.spectrogram = SpectrogramCanvas(self)
 		layout.addWidget(self.spectrogram)
@@ -198,38 +199,39 @@ class MainWindow(QtGui.QMainWindow):
 
 	def _setupControls(self):
 		# Set up device group		
-		deviceCombo = QtGui.QComboBox()
-		for device in sorted(self.devices, lambda a, b: cmp(a.get_name(), b.get_name())):
+		deviceCombo = QtWidgets.QComboBox()
+		print(f"devices:${self.devices}")
+		for device in sorted(self.devices, key=lambda dev: dev.get_name() ):
 			deviceCombo.addItem(device.get_name(), userData=device)
-		deviceBtn = QtGui.QPushButton('Open')
+		deviceBtn = QtWidgets.QPushButton('Open')
 		deviceBtn.clicked.connect(self._deviceButton)
 		self.deviceCombo = deviceCombo
 		self.deviceBtn = deviceBtn
-		device = QtGui.QGroupBox('Device')
-		device.setLayout(QtGui.QGridLayout())
-		device.layout().addWidget(QtGui.QLabel('Serial Port:'), 0, 0)
+		device = QtWidgets.QGroupBox('Device')
+		device.setLayout(QtWidgets.QGridLayout())
+		device.layout().addWidget(QtWidgets.QLabel('Serial Port:'), 0, 0)
 		device.layout().addWidget(deviceCombo, 0, 1)
 		device.layout().addWidget(deviceBtn, 1, 1)
 		# Set up device parameters group
-		fftSize = QtGui.QLabel()
-		sampleRate = QtGui.QLabel()
-		modifyBtn = QtGui.QPushButton('Modify')
+		fftSize = QtWidgets.QLabel()
+		sampleRate = QtWidgets.QLabel()
+		modifyBtn = QtWidgets.QPushButton('Modify')
 		modifyBtn.clicked.connect(self._modifyButton)
 		self.fftSize = fftSize
 		self.sampleRate = sampleRate
 		self.modifyBtn = modifyBtn
-		parameters = QtGui.QGroupBox('Device Parameters')
-		parameters.setLayout(QtGui.QGridLayout())
-		parameters.layout().addWidget(QtGui.QLabel('FFT Size:'), 0, 0)
+		parameters = QtWidgets.QGroupBox('Device Parameters')
+		parameters.setLayout(QtWidgets.QGridLayout())
+		parameters.layout().addWidget(QtWidgets.QLabel('FFT Size:'), 0, 0)
 		parameters.layout().addWidget(fftSize, 0, 1)
-		parameters.layout().addWidget(QtGui.QLabel('Sample Rate:'), 1, 0)
+		parameters.layout().addWidget(QtWidgets.QLabel('Sample Rate:'), 1, 0)
 		parameters.layout().addWidget(sampleRate, 1, 1)
 		parameters.layout().addWidget(modifyBtn, 2, 1)
 		parameters.setDisabled(True)
 		self.parameters = parameters
 		# Set up graph values group
-		lowSlider = QtGui.QSlider(QtCore.Qt.Orientation.Horizontal)
-		highSlider = QtGui.QSlider(QtCore.Qt.Orientation.Horizontal)
+		lowSlider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+		highSlider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
 		lowSlider.setRange(0, 100)
 		lowSlider.setValue(20)
 		lowSlider.valueChanged.connect(self._sliderChanged)
@@ -238,14 +240,14 @@ class MainWindow(QtGui.QMainWindow):
 		highSlider.valueChanged.connect(self._sliderChanged)
 		self.lowSlider = lowSlider
 		self.highSlider = highSlider
-		self.lowValue = QtGui.QLabel()
-		self.highValue = QtGui.QLabel()
-		graphs = QtGui.QGroupBox('Graphs')
-		graphs.setLayout(QtGui.QGridLayout())
-		graphs.layout().addWidget(QtGui.QLabel('Intensity Min:'), 0, 0)
+		self.lowValue = QtWidgets.QLabel()
+		self.highValue = QtWidgets.QLabel()
+		graphs = QtWidgets.QGroupBox('Graphs')
+		graphs.setLayout(QtWidgets.QGridLayout())
+		graphs.layout().addWidget(QtWidgets.QLabel('Intensity Min:'), 0, 0)
 		graphs.layout().addWidget(self.lowValue, 0, 1)
 		graphs.layout().addWidget(lowSlider, 1, 0, 1, 2)
-		graphs.layout().addWidget(QtGui.QLabel('Intensity Max:'), 2, 0)
+		graphs.layout().addWidget(QtWidgets.QLabel('Intensity Max:'), 2, 0)
 		graphs.layout().addWidget(self.highValue, 2, 1)
 		graphs.layout().addWidget(highSlider, 3, 0, 1, 2)
 		return (device, parameters, graphs)
@@ -259,22 +261,22 @@ class MainWindow(QtGui.QMainWindow):
 
 	def _modifyButton(self):
 		# Create dialog
-		dialog = QtGui.QDialog(self)
+		dialog = QtWidgets.QDialog(self)
 		dialog.setModal(True)
-		sampleRate = QtGui.QSpinBox()
+		sampleRate = QtWidgets.QSpinBox()
 		sampleRate.setRange(1,9000)
 		sampleRate.setValue(self.openDevice.get_samplerate())
-		buttons = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)
+		buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
 		buttons.accepted.connect(dialog.accept)
 		buttons.rejected.connect(dialog.reject)
-		dialog.setLayout(QtGui.QVBoxLayout())
-		dialog.layout().addWidget(QtGui.QLabel('Sample Rate (hz):'))
+		dialog.setLayout(QtWidgets.QVBoxLayout())
+		dialog.layout().addWidget(QtWidgets.QLabel('Sample Rate (hz):'))
 		dialog.layout().addWidget(sampleRate)
 		dialog.layout().addWidget(buttons)
 		dialog.setWindowTitle('Modify Device')
 		# Show dialog and update device & UI based on results.
 		try:
-			if dialog.exec_() == QtGui.QDialog.Accepted:
+			if dialog.exec_() == QtWidgets.QDialog.Accepted:
 				self.openDevice.set_samplerate(sampleRate.value())
 				self._updateDeviceUI()
 		except IOError as e:
